@@ -50,6 +50,7 @@ use bevy_utils::HashMap;
 use box_shadow::BoxShadowPlugin;
 use bytemuck::{Pod, Zeroable};
 use core::ops::Range;
+use bevy_render::sync_world::MainEntity;
 use graph::{NodeUi, SubGraphUi};
 pub use pipeline::*;
 pub use render_pass::*;
@@ -187,6 +188,7 @@ pub struct ExtractedUiNode {
     /// Border thickness of the UI node.
     pub border: BorderRect,
     pub node_type: NodeType,
+    pub main_entity: MainEntity,
 }
 
 #[derive(Resource, Default)]
@@ -201,6 +203,7 @@ pub fn extract_uinode_background_colors(
     default_ui_camera: Extract<DefaultUiCamera>,
     uinode_query: Extract<
         Query<(
+            Entity,
             &Node,
             &GlobalTransform,
             &ViewVisibility,
@@ -211,7 +214,7 @@ pub fn extract_uinode_background_colors(
     >,
     mapping: Extract<Query<&RenderEntity>>,
 ) {
-    for (uinode, transform, view_visibility, clip, camera, background_color) in &uinode_query {
+    for (entity, uinode, transform, view_visibility, clip, camera, background_color) in &uinode_query {
         let Some(camera_entity) = camera.map(TargetCamera::entity).or(default_ui_camera.get())
         else {
             continue;
@@ -245,6 +248,7 @@ pub fn extract_uinode_background_colors(
                 border: uinode.border(),
                 border_radius: uinode.border_radius(),
                 node_type: NodeType::Rect,
+                main_entity: entity.into(),
             },
         );
     }
@@ -259,6 +263,7 @@ pub fn extract_uinode_images(
     uinode_query: Extract<
         Query<
             (
+                Entity,
                 &Node,
                 &GlobalTransform,
                 &ViewVisibility,
@@ -272,7 +277,7 @@ pub fn extract_uinode_images(
     >,
     mapping: Extract<Query<&RenderEntity>>,
 ) {
-    for (uinode, transform, view_visibility, clip, camera, image, atlas) in &uinode_query {
+    for (entity, uinode, transform, view_visibility, clip, camera, image, atlas) in &uinode_query {
         let Some(camera_entity) = camera.map(TargetCamera::entity).or(default_ui_camera.get())
         else {
             continue;
@@ -333,6 +338,7 @@ pub fn extract_uinode_images(
                 border: uinode.border,
                 border_radius: uinode.border_radius,
                 node_type: NodeType::Rect,
+                main_entity: entity.into(),
             },
         );
     }
@@ -344,6 +350,7 @@ pub fn extract_uinode_borders(
     default_ui_camera: Extract<DefaultUiCamera>,
     uinode_query: Extract<
         Query<(
+            Entity,
             &Node,
             &GlobalTransform,
             &ViewVisibility,
@@ -357,6 +364,7 @@ pub fn extract_uinode_borders(
     let image = AssetId::<Image>::default();
 
     for (
+        entity,
         uinode,
         global_transform,
         view_visibility,
@@ -406,6 +414,7 @@ pub fn extract_uinode_borders(
                         border_radius: uinode.border_radius(),
                         border: uinode.border(),
                         node_type: NodeType::Border,
+                        main_entity: entity.into(),
                     },
                 );
             }
@@ -432,6 +441,7 @@ pub fn extract_uinode_borders(
                     border: BorderRect::square(uinode.outline_width()),
                     border_radius: uinode.outline_radius(),
                     node_type: NodeType::Border,
+                    main_entity: entity.into(),
                 },
             );
         }
@@ -553,6 +563,7 @@ pub fn extract_uinode_text(
     ui_scale: Extract<Res<UiScale>>,
     uinode_query: Extract<
         Query<(
+            Entity,
             &Node,
             &GlobalTransform,
             &ViewVisibility,
@@ -565,7 +576,7 @@ pub fn extract_uinode_text(
     mapping: Extract<Query<&RenderEntity>>,
 ) {
     let default_ui_camera = default_ui_camera.get();
-    for (uinode, global_transform, view_visibility, clip, camera, text, text_layout_info) in
+    for (entity, uinode, global_transform, view_visibility, clip, camera, text, text_layout_info) in
         &uinode_query
     {
         let Some(camera_entity) = camera.map(TargetCamera::entity).or(default_ui_camera) else {
@@ -640,6 +651,7 @@ pub fn extract_uinode_text(
                     border: BorderRect::ZERO,
                     border_radius: ResolvedBorderRadius::ZERO,
                     node_type: NodeType::Rect,
+                    main_entity: entity.into(),
                 },
             );
         }
@@ -739,7 +751,7 @@ pub fn queue_uinodes(
         transparent_phase.add(TransparentUi {
             draw_function,
             pipeline,
-            entity: *entity,
+            entity: (*entity, extracted_uinode.main_entity),
             sort_key: (
                 FloatOrd(extracted_uinode.stack_index as f32),
                 entity.index(),
@@ -805,7 +817,7 @@ pub fn prepare_uinodes(
 
             for item_index in 0..ui_phase.items.len() {
                 let item = &mut ui_phase.items[item_index];
-                if let Some(extracted_uinode) = extracted_uinodes.uinodes.get(&item.entity) {
+                if let Some(extracted_uinode) = extracted_uinodes.uinodes.get(&item.entity()) {
                     let mut existing_batch = batches.last_mut();
 
                     if batch_image_handle == AssetId::invalid()
@@ -826,7 +838,7 @@ pub fn prepare_uinodes(
                                 camera: extracted_uinode.camera_entity,
                             };
 
-                            batches.push((item.entity, new_batch));
+                            batches.push((item.entity(), new_batch));
 
                             image_bind_groups
                                 .values
