@@ -7,6 +7,8 @@
 //! implementation using bevy's low level rendering api.
 //! It's generally recommended to try the built-in instancing before going with this approach.
 
+use bevy::core_pipeline::core_2d::CORE_2D_DEPTH_FORMAT;
+use bevy::core_pipeline::fullscreen_vertex_shader::fullscreen_shader_vertex_state;
 use bevy::{
     core_pipeline::core_3d::Transparent3d,
     ecs::{
@@ -19,9 +21,7 @@ use bevy::{
     prelude::*,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
-        mesh::{
-            MeshVertexBufferLayoutRef, RenderMesh,
-        },
+        mesh::{MeshVertexBufferLayoutRef, RenderMesh},
         render_asset::RenderAssets,
         render_phase::{
             AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
@@ -34,6 +34,7 @@ use bevy::{
         Render, RenderApp, RenderSet,
     },
 };
+use bevy_render::texture::BevyDefault;
 use bytemuck::{Pod, Zeroable};
 
 /// This example uses a shader source file from the assets subdirectory
@@ -46,28 +47,17 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.5, 0.5, 0.5))),
-        InstanceMaterialData(
-            (1..=10)
-                .flat_map(|x| (1..=10).map(move |y| (x as f32 / 10.0, y as f32 / 10.0)))
-                .map(|(x, y)| InstanceData {
-                    position: Vec3::new(x * 10.0 - 5.0, y * 10.0 - 5.0, 0.0),
-                    scale: 1.0,
-                    color: LinearRgba::from(Color::hsla(x * 360., y, 0.5, 1.0)).to_f32_array(),
-                })
-                .collect(),
-        ),
-        // NOTE: Frustum culling is done based on the Aabb of the Mesh and the GlobalTransform.
-        // As the cube is at the origin, if its Aabb moves outside the view frustum, all the
-        // instanced cubes will be culled.
-        // The InstanceMaterialData contains the 'GlobalTransform' information for this custom
-        // instancing, and that is not taken into account with the built-in frustum culling.
-        // We must disable the built-in frustum culling by adding the `NoFrustumCulling` marker
-        // component to avoid incorrect culling.
-        NoFrustumCulling,
-    ));
+fn setup(mut commands: Commands) {
+    commands.spawn((InstanceMaterialData(
+        (1..=10)
+            .flat_map(|x| (1..=10).map(move |y| (x as f32 / 10.0, y as f32 / 10.0)))
+            .map(|(x, y)| InstanceData {
+                position: Vec3::new(x * 10.0 - 5.0, y * 10.0 - 5.0, 0.0),
+                scale: 1.0,
+                color: LinearRgba::from(Color::hsla(x * 360., y, 0.5, 1.0)).to_f32_array(),
+            })
+            .collect(),
+    ),));
 
     // camera
     commands.spawn((
@@ -96,7 +86,7 @@ impl Plugin for CustomMaterialPlugin {
         app.add_plugins(ExtractComponentPlugin::<InstanceMaterialData>::default());
         app.sub_app_mut(RenderApp)
             .add_render_command::<Transparent3d, DrawCustom>()
-            .init_resource::<SpecializedMeshPipelines<CustomPipeline>>()
+            .init_resource::<SpecializedRenderPipelines<CustomPipeline>>()
             .add_systems(
                 Render,
                 (
@@ -123,7 +113,7 @@ struct InstanceData {
 fn queue_custom(
     transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
     custom_pipeline: Res<CustomPipeline>,
-    mut pipelines: ResMut<SpecializedMeshPipelines<CustomPipeline>>,
+    mut pipelines: ResMut<SpecializedRenderPipelines<CustomPipeline>>,
     pipeline_cache: Res<PipelineCache>,
     meshes: Res<RenderAssets<RenderMesh>>,
     render_mesh_instances: Res<RenderMeshInstances>,
@@ -138,28 +128,13 @@ fn queue_custom(
             continue;
         };
 
-        let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
-
-        let view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
-        let rangefinder = view.rangefinder3d();
         for (entity, main_entity) in &material_meshes {
-            let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
-            else {
-                continue;
-            };
-            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id) else {
-                continue;
-            };
-            let key =
-                view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology());
-            let pipeline = pipelines
-                .specialize(&pipeline_cache, &custom_pipeline, key, &mesh.layout)
-                .unwrap();
+            let pipeline = pipelines.specialize(&pipeline_cache, &custom_pipeline, *msaa);
             transparent_phase.add(Transparent3d {
                 entity: (entity, *main_entity),
                 pipeline,
                 draw_function: draw_custom,
-                distance: rangefinder.distance_translation(&mesh_instance.translation),
+                distance: 0.0,
                 batch_range: 0..1,
                 extra_index: PhaseItemExtraIndex::NONE,
             });
@@ -208,36 +183,74 @@ impl FromWorld for CustomPipeline {
     }
 }
 
-impl SpecializedMeshPipeline for CustomPipeline {
-    type Key = MeshPipelineKey;
+impl SpecializedRenderPipeline for CustomPipeline {
+    type Key = Msaa;
 
-    fn specialize(
-        &self,
-        key: Self::Key,
-        layout: &MeshVertexBufferLayoutRef,
-    ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
-        let mut descriptor = self.mesh_pipeline.specialize(key, layout)?;
-
-        descriptor.primitive.topology = PrimitiveTopology::TriangleStrip;
-        descriptor.vertex.shader = self.shader.clone();
-        descriptor.vertex.buffers[0] = VertexBufferLayout {
-            array_stride: size_of::<InstanceData>() as u64,
-            step_mode: VertexStepMode::Instance,
-            attributes: vec![
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 0, // shader locations 0-2 are taken up by Position, Normal and UV attributes
+    fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
+        RenderPipelineDescriptor {
+            label: Some("custom_shader_instancing".into()),
+            // This is kinda hacky just to get the bind group layout for the view
+            // you may or may not need to do this depending on your shader
+            layout: vec![self.mesh_pipeline.view_layouts[0].clone().bind_group_layout],
+            vertex: VertexState {
+                shader: self.shader.clone(),
+                shader_defs: vec![],
+                entry_point: "vertex".into(),
+                buffers: vec![VertexBufferLayout {
+                    array_stride: size_of::<InstanceData>() as u64,
+                    step_mode: VertexStepMode::Instance,
+                    attributes: vec![
+                        VertexAttribute {
+                            format: VertexFormat::Float32x4,
+                            offset: 0,
+                            shader_location: 0, // shader locations 0-2 are taken up by Position, Normal and UV attributes
+                        },
+                        VertexAttribute {
+                            format: VertexFormat::Float32x4,
+                            offset: VertexFormat::Float32x4.size(),
+                            shader_location: 1,
+                        },
+                    ],
+                }],
+            },
+            fragment: Some(FragmentState {
+                shader: self.shader.clone(),
+                shader_defs: vec![],
+                entry_point: "fragment".into(),
+                targets: vec![Some(ColorTargetState {
+                    format: TextureFormat::bevy_default(),
+                    blend: None,
+                    write_mask: ColorWrites::ALL,
+                })],
+            }),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleStrip,
+                ..default()
+            },
+            depth_stencil: Some(DepthStencilState {
+                format: CORE_2D_DEPTH_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: CompareFunction::GreaterEqual,
+                stencil: StencilState {
+                    front: StencilFaceState::IGNORE,
+                    back: StencilFaceState::IGNORE,
+                    read_mask: 0,
+                    write_mask: 0,
                 },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size(),
-                    shader_location: 1,
+                bias: DepthBiasState {
+                    constant: 0,
+                    slope_scale: 0.0,
+                    clamp: 0.0,
                 },
-            ],
-        };
-        descriptor.fragment.as_mut().unwrap().shader = self.shader.clone();
-        Ok(descriptor)
+            }),
+            multisample: MultisampleState {
+                count: key.samples(),
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            push_constant_ranges: vec![],
+            zero_initialize_workgroup_memory: false,
+        }
     }
 }
 
@@ -251,9 +264,7 @@ type DrawCustom = (
 struct DrawMeshInstanced;
 
 impl<P: PhaseItem> RenderCommand<P> for DrawMeshInstanced {
-    type Param = (
-        SRes<RenderMeshInstances>,
-    );
+    type Param = (SRes<RenderMeshInstances>,);
     type ViewQuery = ();
     type ItemQuery = Read<InstanceBuffer>;
 
