@@ -8,20 +8,18 @@
 //! It's generally recommended to try the built-in instancing before going with this approach.
 
 use bevy::core_pipeline::core_2d::CORE_2D_DEPTH_FORMAT;
-use bevy::core_pipeline::fullscreen_vertex_shader::fullscreen_shader_vertex_state;
+use bevy::ecs::query::ROQueryItem;
 use bevy::{
     core_pipeline::core_3d::Transparent3d,
     ecs::{
         query::QueryItem,
         system::{lifetimeless::*, SystemParamItem},
     },
-    pbr::{
-        MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
-    },
+    pbr::RenderMeshInstances,
     prelude::*,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
-        mesh::{MeshVertexBufferLayoutRef, RenderMesh},
+        mesh::RenderMesh,
         render_asset::RenderAssets,
         render_phase::{
             AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
@@ -30,11 +28,13 @@ use bevy::{
         render_resource::*,
         renderer::RenderDevice,
         sync_world::MainEntity,
-        view::{ExtractedView, NoFrustumCulling},
+        view::ExtractedView,
         Render, RenderApp, RenderSet,
     },
 };
+use bevy_render::render_resource::binding_types::uniform_buffer;
 use bevy_render::texture::BevyDefault;
+use bevy_render::view::{ViewUniform, ViewUniformOffset, ViewUniforms};
 use bytemuck::{Pod, Zeroable};
 
 /// This example uses a shader source file from the assets subdirectory
@@ -91,7 +91,7 @@ impl Plugin for CustomMaterialPlugin {
                 Render,
                 (
                     queue_custom.in_set(RenderSet::QueueMeshes),
-                    prepare_instance_buffers.in_set(RenderSet::PrepareResources),
+                    (prepare_instance_buffers, prepare_bind_group).in_set(RenderSet::PrepareResources),
                 ),
             );
     }
@@ -169,16 +169,22 @@ fn prepare_instance_buffers(
 #[derive(Resource)]
 struct CustomPipeline {
     shader: Handle<Shader>,
-    mesh_pipeline: MeshPipeline,
+    layout: BindGroupLayout,
 }
 
 impl FromWorld for CustomPipeline {
     fn from_world(world: &mut World) -> Self {
-        let mesh_pipeline = world.resource::<MeshPipeline>();
+        let layout = world.resource::<RenderDevice>().create_bind_group_layout(
+            "custom_shader_instancing",
+            &BindGroupLayoutEntries::single(
+                ShaderStages::VERTEX_FRAGMENT,
+                uniform_buffer::<ViewUniform>(true).visibility(ShaderStages::VERTEX_FRAGMENT),
+            ),
+        );
 
         CustomPipeline {
             shader: world.load_asset(SHADER_ASSET_PATH),
-            mesh_pipeline: mesh_pipeline.clone(),
+            layout,
         }
     }
 }
@@ -189,9 +195,7 @@ impl SpecializedRenderPipeline for CustomPipeline {
     fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
         RenderPipelineDescriptor {
             label: Some("custom_shader_instancing".into()),
-            // This is kinda hacky just to get the bind group layout for the view
-            // you may or may not need to do this depending on your shader
-            layout: vec![self.mesh_pipeline.view_layouts[0].clone().bind_group_layout],
+            layout: vec![self.layout.clone()],
             vertex: VertexState {
                 shader: self.shader.clone(),
                 shader_defs: vec![],
@@ -254,31 +258,52 @@ impl SpecializedRenderPipeline for CustomPipeline {
     }
 }
 
+#[derive(Resource)]
+struct CustomPipelineBindGroup(BindGroup);
+
+fn prepare_bind_group(
+    mut commands: Commands,
+    render_device: Res<RenderDevice>, custom_pipeline: Res<CustomPipeline>, view_uniforms: Res<ViewUniforms>
+) {
+    let Some(binding) = view_uniforms.uniforms.binding() else {
+        return;
+    };
+
+    let bind_group = render_device.create_bind_group(
+        "custom_shader_instancing",
+        &custom_pipeline.layout,
+        &BindGroupEntries::single(binding),
+    );
+
+    commands.insert_resource(CustomPipelineBindGroup(bind_group));
+}
+
 type DrawCustom = (
     SetItemPipeline,
-    SetMeshViewBindGroup<0>,
-    SetMeshBindGroup<1>,
     DrawMeshInstanced,
 );
 
 struct DrawMeshInstanced;
 
 impl<P: PhaseItem> RenderCommand<P> for DrawMeshInstanced {
-    type Param = (SRes<RenderMeshInstances>,);
-    type ViewQuery = ();
+    type Param = (SRes<CustomPipelineBindGroup>);
+    type ViewQuery = (Read<ViewUniformOffset>,);
     type ItemQuery = Read<InstanceBuffer>;
 
     #[inline]
     fn render<'w>(
         _item: &P,
-        _view: (),
+        (view_uniform_offset,): ROQueryItem<'w, Self::ViewQuery>,
         instance_buffer: Option<&'w InstanceBuffer>,
-        (render_mesh_instances): SystemParamItem<'w, '_, Self::Param>,
+        (bind_group): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         let Some(instance_buffer) = instance_buffer else {
             return RenderCommandResult::Skip;
         };
+        let bind_group = bind_group.into_inner();
+
+        pass.set_bind_group(0, &bind_group.0, &[view_uniform_offset.offset]);
         pass.set_vertex_buffer(0, instance_buffer.buffer.slice(..));
         pass.draw(0..4, 0..instance_buffer.length as u32);
         RenderCommandResult::Success
