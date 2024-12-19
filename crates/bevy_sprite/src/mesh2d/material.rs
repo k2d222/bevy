@@ -5,18 +5,25 @@ use crate::{
     SetMesh2dBindGroup, SetMesh2dViewBindGroup,
 };
 use bevy_app::{App, Plugin};
-use bevy_asset::{Asset, AssetApp, AssetId, AssetServer, Handle};
+use bevy_asset::prelude::AssetChanged;
+use bevy_asset::{AsAssetId, Asset, AssetApp, AssetId, AssetServer, Handle};
 use bevy_core_pipeline::{
     core_2d::{AlphaMask2d, AlphaMask2dBinKey, Opaque2d, Opaque2dBinKey, Transparent2d},
     tonemapping::{DebandDither, Tonemapping},
 };
 use bevy_derive::{Deref, DerefMut};
+use bevy_ecs::query::{QueryFilter, QueryItem};
+use bevy_ecs::system::lifetimeless::Read;
 use bevy_ecs::{
     prelude::*,
     system::{lifetimeless::SRes, SystemParamItem},
 };
 use bevy_math::FloatOrd;
 use bevy_reflect::{prelude::ReflectDefault, Reflect};
+use bevy_render::render_phase::specialization::{
+    CheckNeedsSpecialization, SpecializedMaterial, ViewKeyCache,
+};
+use bevy_render::sync_world::MainEntity;
 use bevy_render::view::RenderVisibleEntities;
 use bevy_render::{
     mesh::{MeshVertexBufferLayoutRef, RenderMesh},
@@ -150,6 +157,83 @@ pub trait Material2d: AsBindGroup + Asset + Clone + Sized {
     }
 }
 
+#[derive(QueryFilter)]
+pub struct MeshMaterial2dNeedsSpecialization<M: Material2d> {
+    _mesh: Or<(Changed<Mesh2d>, AssetChanged<Mesh2d>)>,
+    _material: Or<(Changed<MeshMaterial2d<M>>, AssetChanged<MeshMaterial2d<M>>)>,
+}
+
+impl<M> CheckNeedsSpecialization for MeshMaterial2d<M>
+where
+    M: Material2d,
+{
+    type ViewQueryData = ();
+    type ViewQueryFilter = MeshMaterial2dNeedsSpecialization<M>;
+
+    fn needs_specialization(item: QueryItem<'_, Self::ViewQueryData>) -> bool {
+        true
+    }
+}
+
+impl<M> SpecializedMaterial for MeshMaterial2d<M>
+where
+    M: Material2d,
+{
+    type Param = (
+        (
+            SRes<ViewBinnedRenderPhases<Opaque2d>>,
+            SRes<ViewBinnedRenderPhases<AlphaMask2d>>,
+            SRes<ViewSortedRenderPhases<Transparent2d>>,
+        ),
+        (
+            SRes<RenderMaterial2dInstances<M>>,
+            SRes<RenderAssets<PreparedMaterial2d<M>>>,
+            SRes<RenderMesh2dInstances>,
+            SRes<RenderAssets<RenderMesh>>,
+        ),
+    );
+    type Pipeline = Mesh2dPipeline;
+    type ViewKey = Mesh2dPipelineKey;
+    type VisibilityClass = Mesh2d;
+
+    fn should_specialize_view(
+        view_entity: Entity,
+        ((transparent_render_phases, opaque_render_phases, alpha_mask_render_phases), _): &SystemParamItem<Self::Param>,
+    ) -> bool {
+        transparent_render_phases.contains_key(&view_entity)
+            || opaque_render_phases.contains_key(&view_entity)
+            || alpha_mask_render_phases.contains_key(&view_entity)
+    }
+
+    fn get_mesh_and_pipeline_key<'w>(
+        (_entity, main_entity): (Entity, MainEntity),
+        view_key: &Self::ViewKey,
+        (_, (render_material_instances, render_materials, render_mesh_instances, render_meshes)): &'w SystemParamItem<Self::Param>,
+    ) -> Option<(
+        &'w RenderMesh,
+        <Self::Pipeline as SpecializedMeshPipeline>::Key,
+    )> {
+        let Some(material_asset_id) = render_material_instances.get(&main_entity) else {
+            return None;
+        };
+        let Some(mesh_instance) = render_mesh_instances.get(&main_entity) else {
+            return None;
+        };
+        let Some(material_2d) = render_materials.get(*material_asset_id) else {
+            return None;
+        };
+        let Some(mesh) = render_meshes.get(mesh_instance.mesh_asset_id) else {
+            return None;
+        };
+
+        let mesh_key = *view_key
+            | Mesh2dPipelineKey::from_primitive_topology(mesh.primitive_topology())
+            | material_2d.properties.mesh_pipeline_key_bits;
+
+        Some((mesh, mesh_key))
+    }
+}
+
 /// A [material](Material2d) used for rendering a [`Mesh2d`].
 ///
 /// See [`Material2d`] for general information about 2D materials and how to implement your own materials.
@@ -197,6 +281,14 @@ impl<M: Material2d> From<MeshMaterial2d<M>> for AssetId<M> {
 impl<M: Material2d> From<&MeshMaterial2d<M>> for AssetId<M> {
     fn from(material: &MeshMaterial2d<M>) -> Self {
         material.id()
+    }
+}
+
+impl<M: Material2d> AsAssetId for MeshMaterial2d<M> {
+    type Asset = M;
+
+    fn as_asset_id(&self) -> AssetId<Self::Asset> {
+        self.id()
     }
 }
 

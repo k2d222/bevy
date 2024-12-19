@@ -1,7 +1,8 @@
 use bevy_app::Plugin;
 use bevy_asset::{load_internal_asset, AssetId, Handle};
 
-use crate::Material2dBindGroupId;
+use crate::{tonemapping_pipeline_key, Material2dBindGroupId};
+use bevy_core_pipeline::tonemapping::DebandDither;
 use bevy_core_pipeline::{
     core_2d::{AlphaMask2d, Camera2d, Opaque2d, Transparent2d, CORE_2D_DEPTH_FORMAT},
     tonemapping::{
@@ -9,6 +10,7 @@ use bevy_core_pipeline::{
     },
 };
 use bevy_derive::{Deref, DerefMut};
+use bevy_ecs::query::QueryItem;
 use bevy_ecs::{
     prelude::*,
     query::ROQueryItem,
@@ -16,6 +18,9 @@ use bevy_ecs::{
 };
 use bevy_image::{BevyDefault, Image, ImageSampler, TextureFormatPixelInfo};
 use bevy_math::{Affine3, Vec4};
+use bevy_render::camera::Camera;
+use bevy_render::render_phase::specialization::SpecializedViewKey;
+use bevy_render::view::{Msaa, VisibleEntities};
 use bevy_render::{
     batching::{
         gpu_preprocessing::IndirectParameters,
@@ -517,6 +522,34 @@ impl Mesh2dPipelineKey {
             x if x == PrimitiveTopology::TriangleStrip as u32 => PrimitiveTopology::TriangleStrip,
             _ => PrimitiveTopology::default(),
         }
+    }
+}
+
+impl SpecializedViewKey for Mesh2dPipelineKey {
+    type ViewQueryData = (
+        Read<Camera>,
+        Read<Msaa>,
+        Option<Read<Tonemapping>>,
+        Option<Read<DebandDither>>,
+    );
+
+    fn get_view_key(
+        (camera, msaa, tonemapping, dither): QueryItem<Self::ViewQueryData>,
+    ) -> Self {
+        let mut view_key = Mesh2dPipelineKey::from_msaa_samples(msaa.samples())
+            | Mesh2dPipelineKey::from_hdr(camera.hdr);
+
+        if !camera.hdr {
+            if let Some(tonemapping) = tonemapping {
+                view_key |= Mesh2dPipelineKey::TONEMAP_IN_SHADER;
+                view_key |= tonemapping_pipeline_key(*tonemapping);
+            }
+            if let Some(DebandDither::Enabled) = dither {
+                view_key |= Mesh2dPipelineKey::DEBAND_DITHER;
+            }
+        }
+
+        view_key
     }
 }
 

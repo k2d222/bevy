@@ -27,6 +27,7 @@
 mod draw;
 mod draw_state;
 mod rangefinder;
+pub mod specialization;
 
 use bevy_app::{App, Plugin};
 use bevy_derive::{Deref, DerefMut};
