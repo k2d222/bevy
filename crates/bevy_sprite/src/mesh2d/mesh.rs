@@ -553,6 +553,13 @@ impl SpecializedViewKey for Mesh2dPipelineKey {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum RenderPhaseType {
+    Opaque,
+    AlphaMask,
+    Transparent,
+}
+
 impl SpecializedMeshPipeline for Mesh2dPipeline {
     type Key = Mesh2dPipelineKey;
 
