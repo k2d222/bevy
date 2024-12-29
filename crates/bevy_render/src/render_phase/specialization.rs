@@ -52,14 +52,7 @@ where
         };
 
         app
-            .add_systems(First, clear_needs_specialization::<NSQF>)
-            .add_systems(
-                PostUpdate,
-                (
-                    check_entity_needs_specialization::<NSQF>,
-                    check_views_need_specialization::<VK, VC>,
-                ),
-            );
+            .add_systems(First, clear_needs_specialization);
     }
 
     fn finish(&self, app: &mut App) {
@@ -117,7 +110,7 @@ pub fn check_entity_needs_specialization<NSQF>(
     );
 }
 
-fn clear_needs_specialization<M>(
+fn clear_needs_specialization(
     mut commands: Commands,
     query: Query<Entity, With<NeedsSpecialization>>,
 ) {

@@ -72,7 +72,7 @@ use bevy_core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy_ecs::query::QueryItem;
 use bevy_render::camera::TemporalJitter;
 use bevy_render::prelude::Msaa;
-use bevy_render::render_phase::specialization::SpecializedViewKey;
+use bevy_render::render_phase::specialization::{check_views_need_specialization, SpecializedViewKey, ViewKeyCache};
 use bevy_render::render_phase::DrawFunctionId;
 use bevy_render::sync_world::{MainEntity, MainEntityHashMap};
 use bevy_render::view::{ExtractedView, RenderVisibleEntities};
@@ -148,19 +148,23 @@ impl Plugin for MeshRenderPlugin {
         load_internal_asset!(app, SKINNING_HANDLE, "skinning.wgsl", Shader::from_wgsl);
         load_internal_asset!(app, MORPH_HANDLE, "morph.wgsl", Shader::from_wgsl);
 
-        app.add_systems(
-            PostUpdate,
-            (no_automatic_skin_batching, no_automatic_morph_batching),
-        )
-        .add_plugins((
-            BinnedRenderPhasePlugin::<Opaque3d, MeshPipeline>::default(),
-            BinnedRenderPhasePlugin::<AlphaMask3d, MeshPipeline>::default(),
-            BinnedRenderPhasePlugin::<Shadow, MeshPipeline>::default(),
-            BinnedRenderPhasePlugin::<Opaque3dDeferred, MeshPipeline>::default(),
-            BinnedRenderPhasePlugin::<AlphaMask3dDeferred, MeshPipeline>::default(),
-            SortedRenderPhasePlugin::<Transmissive3d, MeshPipeline>::default(),
-            SortedRenderPhasePlugin::<Transparent3d, MeshPipeline>::default(),
-        ));
+        app
+            .add_plugins(ExtractResourcePlugin::<ViewKeyCache<MeshPipelineKey>>::default())
+            .init_resouce::<ViewKeyCache<MeshPipelineKey>>()
+            .add_systems(
+                PostUpdate,
+                (check_views_need_specialization::<MeshPipelineKey, Mesh3d>,
+                 no_automatic_skin_batching, no_automatic_morph_batching),
+            )
+            .add_plugins((
+                BinnedRenderPhasePlugin::<Opaque3d, MeshPipeline>::default(),
+                BinnedRenderPhasePlugin::<AlphaMask3d, MeshPipeline>::default(),
+                BinnedRenderPhasePlugin::<Shadow, MeshPipeline>::default(),
+                BinnedRenderPhasePlugin::<Opaque3dDeferred, MeshPipeline>::default(),
+                BinnedRenderPhasePlugin::<AlphaMask3dDeferred, MeshPipeline>::default(),
+                SortedRenderPhasePlugin::<Transmissive3d, MeshPipeline>::default(),
+                SortedRenderPhasePlugin::<Transparent3d, MeshPipeline>::default(),
+            ));
 
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
@@ -1111,18 +1115,18 @@ pub fn extract_meshes_for_cpu_building(
         || render_mesh_instance_queues.borrow_local_mut(),
         |queue,
          (
-            entity,
-            view_visibility,
-            transform,
-            previous_transform,
-            mesh,
-            no_frustum_culling,
-            not_shadow_receiver,
-            transmitted_receiver,
-            not_shadow_caster,
-            no_automatic_batching,
-            visibility_range,
-        )| {
+             entity,
+             view_visibility,
+             transform,
+             previous_transform,
+             mesh,
+             no_frustum_culling,
+             not_shadow_receiver,
+             transmitted_receiver,
+             not_shadow_caster,
+             no_automatic_batching,
+             visibility_range,
+         )| {
             if !view_visibility.get() {
                 return;
             }
@@ -1254,20 +1258,20 @@ pub fn extract_meshes_for_gpu_building(
         || render_mesh_instance_queues.borrow_local_mut(),
         |queue,
          (
-            entity,
-            view_visibility,
-            transform,
-            previous_transform,
-            lightmap,
-            aabb,
-            mesh,
-            no_frustum_culling,
-            not_shadow_receiver,
-            transmitted_receiver,
-            not_shadow_caster,
-            no_automatic_batching,
-            visibility_range,
-        )| {
+             entity,
+             view_visibility,
+             transform,
+             previous_transform,
+             lightmap,
+             aabb,
+             mesh,
+             no_frustum_culling,
+             not_shadow_receiver,
+             transmitted_receiver,
+             not_shadow_caster,
+             no_automatic_batching,
+             visibility_range,
+         )| {
             if !view_visibility.get() {
                 queue.remove(entity.into(), any_gpu_culling);
                 return;
@@ -2909,10 +2913,10 @@ impl<P: PhaseItem> RenderCommand<P> for DrawMesh {
                         );
                     }
                     Some((
-                        indirect_parameters_offset,
-                        indirect_parameters_count,
-                        indirect_parameters_buffer,
-                    )) => {
+                             indirect_parameters_offset,
+                             indirect_parameters_count,
+                             indirect_parameters_buffer,
+                         )) => {
                         pass.multi_draw_indexed_indirect(
                             indirect_parameters_buffer,
                             indirect_parameters_offset,
@@ -2926,10 +2930,10 @@ impl<P: PhaseItem> RenderCommand<P> for DrawMesh {
                     pass.draw(vertex_buffer_slice.range, batch_range.clone());
                 }
                 Some((
-                    indirect_parameters_offset,
-                    indirect_parameters_count,
-                    indirect_parameters_buffer,
-                )) => {
+                         indirect_parameters_offset,
+                         indirect_parameters_count,
+                         indirect_parameters_buffer,
+                     )) => {
                     pass.multi_draw_indirect(
                         indirect_parameters_buffer,
                         indirect_parameters_offset,

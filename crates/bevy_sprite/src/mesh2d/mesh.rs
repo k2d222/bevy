@@ -1,6 +1,5 @@
-use bevy_app::Plugin;
+use bevy_app::{Plugin, PostUpdate};
 use bevy_asset::{load_internal_asset, AssetId, Handle};
-
 use crate::{tonemapping_pipeline_key, Material2dBindGroupId};
 use bevy_core_pipeline::tonemapping::DebandDither;
 use bevy_core_pipeline::{
@@ -19,7 +18,6 @@ use bevy_ecs::{
 use bevy_image::{BevyDefault, Image, ImageSampler, TextureFormatPixelInfo};
 use bevy_math::{Affine3, Vec4};
 use bevy_render::camera::Camera;
-use bevy_render::render_phase::specialization::SpecializedViewKey;
 use bevy_render::view::{Msaa, VisibleEntities};
 use bevy_render::{
     batching::{
@@ -30,6 +28,7 @@ use bevy_render::{
         },
         GetBatchData, GetFullBatchData, NoAutomaticBatching,
     },
+    extract_resource::ExtractResourcePlugin,
     globals::{GlobalsBuffer, GlobalsUniform},
     mesh::{
         allocator::MeshAllocator, Mesh, Mesh2d, MeshVertexBufferLayoutRef, RenderMesh,
@@ -37,6 +36,7 @@ use bevy_render::{
     },
     render_asset::RenderAssets,
     render_phase::{
+        specialization::{check_views_need_specialization, SpecializedViewKey, ViewKeyCache},
         PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, TrackedRenderPass,
     },
     render_resource::{binding_types::uniform_buffer, *},
@@ -96,6 +96,13 @@ impl Plugin for Mesh2dRenderPlugin {
             Shader::from_wgsl
         );
         load_internal_asset!(app, MESH2D_SHADER_HANDLE, "mesh2d.wgsl", Shader::from_wgsl);
+
+        app
+            .add_plugins(ExtractResourcePlugin::<ViewKeyCache<Mesh2dPipelineKey>>::default())
+            .init_resouce::<ViewKeyCache<Mesh2dPipelineKey>>()
+            .add_systems(
+                PostUpdate,
+                check_views_need_specialization::<Mesh2dPipelineKey, Mesh2d>);
 
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
