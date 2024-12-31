@@ -925,7 +925,7 @@ pub fn queue_prepass_material_meshes<M: Material>(
                         opaque_deferred_phase.as_mut().unwrap().add(
                             OpaqueNoLightmap3dBinKey {
                                 batch_set_key: OpaqueNoLightmap3dBatchSetKey {
-                                    draw_function: opaque_draw_deferred,
+                                    draw_function: material.properties.deferred_draw_function_id.unwrap(),
                                     pipeline: pipeline_id,
                                     material_bind_group_index: Some(material.binding.group.0),
                                 },
@@ -938,7 +938,7 @@ pub fn queue_prepass_material_meshes<M: Material>(
                         opaque_phase.add(
                             OpaqueNoLightmap3dBinKey {
                                 batch_set_key: OpaqueNoLightmap3dBatchSetKey {
-                                    draw_function: opaque_draw_prepass,
+                                    draw_function: material.properties.prepass_draw_function_id.unwrap(),
                                     pipeline: pipeline_id,
                                     material_bind_group_index: Some(material.binding.group.0),
                                 },
@@ -954,7 +954,7 @@ pub fn queue_prepass_material_meshes<M: Material>(
                     if deferred {
                         let bin_key = OpaqueNoLightmap3dBinKey {
                             batch_set_key: OpaqueNoLightmap3dBatchSetKey {
-                                draw_function: alpha_mask_draw_deferred,
+                                draw_function: material.properties.deferred_draw_function_id.unwrap(),
                                 pipeline: pipeline_id,
                                 material_bind_group_index: Some(material.binding.group.0),
                             },
@@ -968,7 +968,7 @@ pub fn queue_prepass_material_meshes<M: Material>(
                     } else if let Some(alpha_mask_phase) = alpha_mask_phase.as_mut() {
                         let bin_key = OpaqueNoLightmap3dBinKey {
                             batch_set_key: OpaqueNoLightmap3dBatchSetKey {
-                                draw_function: alpha_mask_draw_prepass,
+                                draw_function: material.properties.prepass_draw_function_id.unwrap(),
                                 pipeline: pipeline_id,
                                 material_bind_group_index: Some(material.binding.group.0),
                             },
