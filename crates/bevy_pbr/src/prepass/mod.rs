@@ -744,17 +744,6 @@ pub fn prepare_prepass_view_bind_group<M: Material>(
 
 #[allow(clippy::too_many_arguments)]
 pub fn queue_prepass_material_meshes<M: Material>(
-    (
-        opaque_draw_functions,
-        alpha_mask_draw_functions,
-        opaque_deferred_draw_functions,
-        alpha_mask_deferred_draw_functions,
-    ): (
-        Res<DrawFunctions<Opaque3dPrepass>>,
-        Res<DrawFunctions<AlphaMask3dPrepass>>,
-        Res<DrawFunctions<Opaque3dDeferred>>,
-        Res<DrawFunctions<AlphaMask3dDeferred>>,
-    ),
     prepass_pipeline: Res<PrepassPipeline<M>>,
     mut pipelines: ResMut<SpecializedMeshPipelines<PrepassPipeline<M>>>,
     pipeline_cache: Res<PipelineCache>,
@@ -784,22 +773,6 @@ pub fn queue_prepass_material_meshes<M: Material>(
 ) where
     M::Data: PartialEq + Eq + Hash + Clone,
 {
-    let opaque_draw_prepass = opaque_draw_functions
-        .read()
-        .get_id::<DrawPrepass<M>>()
-        .unwrap();
-    let alpha_mask_draw_prepass = alpha_mask_draw_functions
-        .read()
-        .get_id::<DrawPrepass<M>>()
-        .unwrap();
-    let opaque_draw_deferred = opaque_deferred_draw_functions
-        .read()
-        .get_id::<DrawPrepass<M>>()
-        .unwrap();
-    let alpha_mask_draw_deferred = alpha_mask_deferred_draw_functions
-        .read()
-        .get_id::<DrawPrepass<M>>()
-        .unwrap();
     for (
         view,
         visible_entities,
