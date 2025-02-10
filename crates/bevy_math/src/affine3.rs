@@ -42,6 +42,19 @@ impl Affine3 {
             inverse_transpose_3x3.z_axis.z,
         )
     }
+
+    /// Transforms a position (point) from local to world space.
+    /// Applies rotation/scale, then adds the translation.
+    pub fn transform_point3(&self, local_point: Vec3) -> Vec3 {
+        self.matrix3 * local_point + self.translation
+    }
+
+    /// Transforms a direction/vector from local to world space.
+    /// Applies rotation/scale, ignoring translation because
+    /// directions are not affected by translations.
+    pub fn transform_vector3(&self, local_vector: Vec3) -> Vec3 {
+        self.matrix3 * local_vector
+    }
 }
 
 impl From<&Affine3A> for Affine3 {

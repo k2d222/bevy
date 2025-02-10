@@ -1338,6 +1338,7 @@ pub fn extract_meshes_for_cpu_building(
                 lod_index = render_visibility_ranges.lod_index_for_entity(entity.into());
             }
 
+            let aabb = aabb.cloned().and_then(|aabb| aabb.transformed(&(&transform.affine()).into()));
             let mesh_flags = MeshFlags::from_components(
                 transform,
                 lod_index,
@@ -1349,7 +1350,7 @@ pub fn extract_meshes_for_cpu_building(
             let shared = RenderMeshInstanceShared::from_components(
                 previous_transform,
                 mesh,
-                aabb.cloned(),
+                aabb,
                 not_shadow_caster,
                 no_automatic_batching,
             );
@@ -1493,17 +1494,18 @@ pub fn extract_meshes_for_gpu_building(
                 transmitted_receiver,
             );
 
+            let gpu_mesh_culling_data = any_gpu_culling.then(|| MeshCullingData::new(aabb));
+            let aabb = aabb.cloned().and_then(|aabb| aabb.transformed(&(&transform.affine()).into()));
             let shared = RenderMeshInstanceShared::from_components(
                 previous_transform,
                 mesh,
-                aabb.cloned(),
+                aabb,
                 not_shadow_caster,
                 no_automatic_batching,
             );
 
             let lightmap_uv_rect = pack_lightmap_uv_rect(lightmap.map(|lightmap| lightmap.uv_rect));
 
-            let gpu_mesh_culling_data = any_gpu_culling.then(|| MeshCullingData::new(aabb));
 
             let previous_input_index = if shared
                 .flags

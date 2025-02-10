@@ -1,7 +1,7 @@
 use core::borrow::Borrow;
 
 use bevy_ecs::{component::Component, entity::hash_map::EntityHashMap, reflect::ReflectComponent};
-use bevy_math::{Affine3A, Mat3A, Mat4, Vec3, Vec3A, Vec4, Vec4Swizzles};
+use bevy_math::{Affine3, Affine3A, Mat3A, Mat4, Vec3, Vec3A, Vec4, Vec4Swizzles};
 use bevy_reflect::prelude::*;
 
 /// An axis-aligned bounding box, defined by:
@@ -108,6 +108,43 @@ impl Aabb {
         let aabb_center_world = world_from_local.transform_point3a(self.center);
         let signed_distance = p_normal.dot(aabb_center_world) + half_space.d();
         signed_distance > r
+    }
+
+    pub fn to_corners(&self) -> [Vec3; 8] {
+        let c: Vec3 = self.center.into();
+        let e: Vec3 = self.half_extents.into();
+
+        [
+            // (-x, -y, -z)
+            c + Vec3::new(-e.x, -e.y, -e.z),
+            // (-x, -y, +z)
+            c + Vec3::new(-e.x, -e.y,  e.z),
+            // (-x, +y, -z)
+            c + Vec3::new(-e.x,  e.y, -e.z),
+            // (-x, +y, +z)
+            c + Vec3::new(-e.x,  e.y,  e.z),
+            // (+x, -y, -z)
+            c + Vec3::new( e.x, -e.y, -e.z),
+            // (+x, -y, +z)
+            c + Vec3::new( e.x, -e.y,  e.z),
+            // (+x, +y, -z)
+            c + Vec3::new( e.x,  e.y, -e.z),
+            // (+x, +y, +z)
+            c + Vec3::new( e.x,  e.y,  e.z),
+        ]
+    }
+
+    pub fn transformed(&self, world_from_local: &Affine3) -> Option<Aabb> {
+        // Gather all corners in local space
+        let corners = self.to_corners();
+
+        // Transform each corner into world space
+        let transformed_corners = corners.iter().map(|&corner| {
+            world_from_local.transform_point3(corner)
+        });
+
+        // Compute the new AABB from the transformed points
+        Aabb::enclosing(transformed_corners)
     }
 }
 
