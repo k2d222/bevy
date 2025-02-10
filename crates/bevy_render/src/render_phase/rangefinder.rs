@@ -1,4 +1,5 @@
 use bevy_math::{Mat4, Vec3, Vec4};
+use crate::primitives::Aabb;
 
 /// A distance calculator for the draw order of [`PhaseItem`](crate::render_phase::PhaseItem)s.
 pub struct ViewRangefinder3d {
@@ -21,6 +22,12 @@ impl ViewRangefinder3d {
         // NOTE: row 2 of the inverse view matrix dotted with the translation from the model matrix
         // gives the z component of translation of the mesh in view-space
         self.view_from_world_row_2.dot(translation.extend(1.0))
+    }
+
+    pub fn distance_aabb(&self, aabb: &Aabb) -> f32 {
+        // NOTE: row 2 of the inverse view matrix dotted with the center of the AABB
+        // gives the z component of translation of the mesh in view-space
+        self.view_from_world_row_2.dot(aabb.center.extend(1.0))
     }
 
     /// Calculates the distance, or view-space `Z` value, for the given `transform`.

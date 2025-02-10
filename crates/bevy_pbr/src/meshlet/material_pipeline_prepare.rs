@@ -150,11 +150,13 @@ pub fn prepare_material_meshlet_meshes_main_opaque_pass<M: Material>(
 
         for material_id in render_material_instances.values().collect::<HashSet<_>>() {
             let Some(material) = render_materials.get(*material_id) else {
+                println!("Missing material");
                 continue;
             };
             let Some(material_bind_group) =
                 material_bind_group_allocator.get(material.binding.group)
             else {
+                println!("Missing material bind group");
                 continue;
             };
 
@@ -162,6 +164,7 @@ pub fn prepare_material_meshlet_meshes_main_opaque_pass<M: Material>(
                 || material.properties.alpha_mode != AlphaMode::Opaque
                 || material.properties.reads_view_transmission_texture
             {
+                println!("Skipping non-opaque material");
                 continue;
             }
 
@@ -174,6 +177,7 @@ pub fn prepare_material_meshlet_meshes_main_opaque_pass<M: Material>(
                 },
                 fake_vertex_buffer_layout,
             ) else {
+                println!("Failed to specialize material pipeline");
                 continue;
             };
             let material_fragment = material_pipeline_descriptor.fragment.unwrap();
@@ -295,17 +299,20 @@ pub fn prepare_material_meshlet_meshes_prepass<M: Material>(
 
         for material_id in render_material_instances.values().collect::<HashSet<_>>() {
             let Some(material) = render_materials.get(*material_id) else {
+                println!("Missing material");
                 continue;
             };
             let Some(material_bind_group) =
                 material_bind_group_allocator.get(material.binding.group)
             else {
+                println!("Missing material bind group");
                 continue;
             };
 
             if material.properties.alpha_mode != AlphaMode::Opaque
                 || material.properties.reads_view_transmission_texture
             {
+                println!("Skipping non-opaque material");
                 continue;
             }
 
@@ -316,6 +323,7 @@ pub fn prepare_material_meshlet_meshes_prepass<M: Material>(
             if deferred_prepass.is_some() && material_wants_deferred {
                 view_key |= MeshPipelineKey::DEFERRED_PREPASS;
             } else if normal_prepass.is_none() && motion_vector_prepass.is_none() {
+                println!("Skipping material that only wants deferred or prepass");
                 continue;
             }
 

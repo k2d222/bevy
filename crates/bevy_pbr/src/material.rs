@@ -1022,8 +1022,13 @@ pub fn queue_material_meshes<M: Material>(
                     );
                 }
                 RenderPhaseType::Transparent => {
-                    let distance = rangefinder.distance_translation(&mesh_instance.translation)
-                        + material.properties.depth_bias;
+                    let distance = if let Some(aabb) = &mesh_instance.aabb {
+                        rangefinder.distance_aabb(aabb)
+                            + material.properties.depth_bias
+                    } else {
+                        rangefinder.distance_translation(&mesh_instance.translation)
+                            + material.properties.depth_bias
+                    };
                     transparent_phase.add(Transparent3d {
                         entity: (*render_entity, *visible_entity),
                         draw_function: material.properties.draw_function_id,

@@ -729,6 +729,7 @@ pub struct RenderMeshInstanceShared {
     /// Index of the slab that the lightmap resides in, if a lightmap is
     /// present.
     pub lightmap_slab_index: Option<LightmapSlabIndex>,
+    pub aabb: Option<Aabb>,
 }
 
 /// Information that is gathered during the parallel portion of mesh extraction
@@ -808,6 +809,7 @@ impl RenderMeshInstanceShared {
     fn from_components(
         previous_transform: Option<&PreviousGlobalTransform>,
         mesh: &Mesh3d,
+        aabb: Option<Aabb>,
         not_shadow_caster: bool,
         no_automatic_batching: bool,
     ) -> Self {
@@ -828,6 +830,7 @@ impl RenderMeshInstanceShared {
             // This gets filled in later, during `RenderMeshGpuBuilder::update`.
             material_bindings_index: default(),
             lightmap_slab_index: None,
+            aabb,
         }
     }
 
@@ -950,6 +953,7 @@ impl RenderMeshInstancesCpu {
             .map(|render_mesh_instance| RenderMeshQueueData {
                 shared: &render_mesh_instance.shared,
                 translation: render_mesh_instance.transforms.world_from_local.translation,
+                aabb: render_mesh_instance.aabb,
             })
     }
 
@@ -973,6 +977,7 @@ impl RenderMeshInstancesGpu {
             .map(|render_mesh_instance| RenderMeshQueueData {
                 shared: &render_mesh_instance.shared,
                 translation: render_mesh_instance.translation,
+                aabb: render_mesh_instance.aabb,
             })
     }
 
@@ -1273,6 +1278,7 @@ pub struct RenderMeshQueueData<'a> {
     pub shared: &'a RenderMeshInstanceShared,
     /// The translation of the mesh instance.
     pub translation: Vec3,
+    pub aabb: Option<Aabb>,
 }
 
 /// A [`SystemSet`] that encompasses both [`extract_meshes_for_cpu_building`]
@@ -1296,6 +1302,7 @@ pub fn extract_meshes_for_cpu_building(
             &GlobalTransform,
             Option<&PreviousGlobalTransform>,
             &Mesh3d,
+            Option<&Aabb>,
             Has<NoFrustumCulling>,
             Has<NotShadowReceiver>,
             Has<TransmittedShadowReceiver>,
@@ -1314,6 +1321,7 @@ pub fn extract_meshes_for_cpu_building(
             transform,
             previous_transform,
             mesh,
+             aabb,
             no_frustum_culling,
             not_shadow_receiver,
             transmitted_receiver,
@@ -1341,6 +1349,7 @@ pub fn extract_meshes_for_cpu_building(
             let shared = RenderMeshInstanceShared::from_components(
                 previous_transform,
                 mesh,
+                aabb.cloned(),
                 not_shadow_caster,
                 no_automatic_batching,
             );
@@ -1487,6 +1496,7 @@ pub fn extract_meshes_for_gpu_building(
             let shared = RenderMeshInstanceShared::from_components(
                 previous_transform,
                 mesh,
+                aabb.cloned(),
                 not_shadow_caster,
                 no_automatic_batching,
             );
