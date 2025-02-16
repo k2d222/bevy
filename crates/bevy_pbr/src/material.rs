@@ -42,7 +42,7 @@ use bevy_render::{
     renderer::RenderDevice,
     sync_world::MainEntity,
     view::{ExtractedView, Msaa, RenderVisibilityRanges, ViewVisibility},
-    Extract,
+    Extract, RenderCaches,
 };
 use bevy_render::{mesh::allocator::MeshAllocator, sync_world::MainEntityHashMap};
 use bevy_render::{texture::FallbackImage, view::RenderVisibleEntities};
@@ -383,6 +383,22 @@ where
 
     fn finish(&self, app: &mut App) {
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+            // Cache clearing callbacks
+            let clear_material_caches = render_app.register_system(clear_material_caches::<M>);
+            let mut caches = render_app.world_mut().resource_mut::<RenderCaches>();
+            caches.add_clear_cache_callback(clear_material_caches);
+            if self.prepass_enabled {
+                let clear_prepass_material_caches =
+                    render_app.register_system(clear_prepass_material_caches::<M>);
+                let mut caches = render_app.world_mut().resource_mut::<RenderCaches>();
+                caches.add_clear_cache_callback(clear_prepass_material_caches);
+            }
+            if self.shadows_enabled {
+                let clear_light_caches = render_app.register_system(clear_light_caches::<M>);
+                let mut caches = render_app.world_mut().resource_mut::<RenderCaches>();
+                caches.add_clear_cache_callback(clear_light_caches);
+            }
+
             render_app
                 .init_resource::<MaterialPipeline<M>>()
                 .init_resource::<MaterialBindGroupAllocator<M>>();
@@ -772,6 +788,16 @@ pub fn check_entities_needing_specialization<M>(
     }
 }
 
+fn clear_material_caches<M: Material>(
+    mut view_key_cache: ResMut<ViewKeyCache>,
+    mut entity_specialization_ticks: ResMut<EntitySpecializationTicks<M>>,
+    mut specialized_material_pipeline_cache: ResMut<SpecializedMaterialPipelineCache<M>>,
+) {
+    view_key_cache.clear();
+    specialized_material_pipeline_cache.clear();
+    entity_specialization_ticks.clear();
+}
+
 pub fn specialize_material_meshes<M: Material>(
     render_meshes: Res<RenderAssets<RenderMesh>>,
     render_materials: Res<RenderAssets<PreparedMaterial<M>>>,
@@ -818,15 +844,21 @@ pub fn specialize_material_meshes<M: Material>(
         };
 
         for (_, visible_entity) in visible_entities.iter::<Mesh3d>() {
-            let view_tick = view_specialization_ticks.get(view_entity).unwrap();
-            let entity_tick = entity_specialization_ticks.get(visible_entity).unwrap();
+            let view_tick = view_specialization_ticks.get(view_entity);
+            let entity_tick = entity_specialization_ticks.get(visible_entity);
             let last_specialized_tick = specialized_material_pipeline_cache
                 .get(&(*view_entity, *visible_entity))
                 .map(|(tick, _)| *tick);
-            let needs_specialization = last_specialized_tick.is_none_or(|tick| {
-                view_tick.is_newer_than(tick, ticks.this_run())
-                    || entity_tick.is_newer_than(tick, ticks.this_run())
-            });
+            let view_tick_check = |last_specialized_tick| {
+                view_tick
+                    .is_none_or(|tick| tick.is_newer_than(last_specialized_tick, ticks.this_run()))
+            };
+            let entity_tick_check = |last_specialized_tick| {
+                entity_tick
+                    .is_none_or(|tick| tick.is_newer_than(last_specialized_tick, ticks.this_run()))
+            };
+            let needs_specialization = last_specialized_tick
+                .is_none_or(|tick| view_tick_check(tick) || entity_tick_check(tick));
             if !needs_specialization {
                 continue;
             }

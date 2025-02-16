@@ -43,7 +43,7 @@ use bevy_render::{
     renderer::RenderDevice,
     sync_world::{MainEntity, MainEntityHashMap},
     view::{ExtractedView, ViewVisibility},
-    Extract, ExtractSchedule, Render, RenderApp, RenderSet,
+    Extract, ExtractSchedule, Render, RenderApp, RenderCaches, RenderSet,
 };
 use core::{hash::Hash, marker::PhantomData};
 use derive_more::derive::From;
@@ -300,6 +300,9 @@ where
 
     fn finish(&self, app: &mut App) {
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+            let clear_material_caches = render_app.register_system(clear_material_caches::<M>);
+            let mut caches = render_app.world_mut().resource_mut::<RenderCaches>();
+            caches.add_clear_cache_callback(clear_material_caches);
             render_app.init_resource::<Material2dPipeline<M>>();
         }
     }
@@ -627,6 +630,14 @@ pub fn check_entities_needing_specialization<M>(
     }
 }
 
+fn clear_material_caches<M: Material2d>(
+    mut entity_specialization_ticks: ResMut<EntitySpecializationTicks<M>>,
+    mut specialized_material_pipeline_cache: ResMut<SpecializedMaterial2dPipelineCache<M>>,
+) {
+    entity_specialization_ticks.clear();
+    specialized_material_pipeline_cache.clear();
+}
+
 pub fn specialize_material2d_meshes<M: Material2d>(
     material2d_pipeline: Res<Material2dPipeline<M>>,
     mut pipelines: ResMut<SpecializedMeshPipelines<Material2dPipeline<M>>>,
@@ -666,15 +677,21 @@ pub fn specialize_material2d_meshes<M: Material2d>(
         };
 
         for (_, visible_entity) in visible_entities.iter::<Mesh2d>() {
-            let view_tick = view_specialization_ticks.get(view_entity).unwrap();
-            let entity_tick = entity_specialization_ticks.get(visible_entity).unwrap();
+            let view_tick = view_specialization_ticks.get(view_entity);
+            let entity_tick = entity_specialization_ticks.get(visible_entity);
             let last_specialized_tick = specialized_material_pipeline_cache
                 .get(&(*view_entity, *visible_entity))
                 .map(|(tick, _)| *tick);
-            let needs_specialization = last_specialized_tick.is_none_or(|tick| {
-                view_tick.is_newer_than(tick, ticks.this_run())
-                    || entity_tick.is_newer_than(tick, ticks.this_run())
-            });
+            let view_tick_check = |last_specialized_tick| {
+                view_tick
+                    .is_none_or(|tick| tick.is_newer_than(last_specialized_tick, ticks.this_run()))
+            };
+            let entity_tick_check = |last_specialized_tick| {
+                entity_tick
+                    .is_none_or(|tick| tick.is_newer_than(last_specialized_tick, ticks.this_run()))
+            };
+            let needs_specialization = last_specialized_tick
+                .is_none_or(|tick| view_tick_check(tick) || entity_tick_check(tick));
             if !needs_specialization {
                 continue;
             }

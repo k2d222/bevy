@@ -1605,6 +1605,18 @@ pub fn check_light_entities_needing_specialization<M: Material>(
     }
 }
 
+pub fn clear_light_caches<M: Material>(
+    mut light_key_cache: ResMut<LightKeyCache>,
+    mut light_specialization_ticks: ResMut<LightSpecializationTicks>,
+    mut specialized_shadow_material_pipeline_cache: ResMut<
+        SpecializedShadowMaterialPipelineCache<M>,
+    >,
+) {
+    light_key_cache.clear();
+    light_specialization_ticks.clear();
+    specialized_shadow_material_pipeline_cache.clear();
+}
+
 #[derive(Resource, Deref, DerefMut, Default, Debug, Clone)]
 pub struct LightKeyCache(HashMap<RetainedViewEntity, MeshPipelineKey>);
 
@@ -1745,17 +1757,24 @@ pub fn specialize_shadows<M: Material>(
             // so no meshes will be queued
 
             for (_, visible_entity) in visible_entities.iter().copied() {
-                let view_tick = light_specialization_ticks
-                    .get(&extracted_view_light.retained_view_entity)
-                    .unwrap();
-                let entity_tick = entity_specialization_ticks.get(&visible_entity).unwrap();
+                let view_tick =
+                    light_specialization_ticks.get(&extracted_view_light.retained_view_entity);
+                let entity_tick = entity_specialization_ticks.get(&visible_entity);
                 let last_specialized_tick = specialized_material_pipeline_cache
                     .get(&(extracted_view_light.retained_view_entity, visible_entity))
                     .map(|(tick, _)| *tick);
-                let needs_specialization = last_specialized_tick.is_none_or(|tick| {
-                    view_tick.is_newer_than(tick, ticks.this_run())
-                        || entity_tick.is_newer_than(tick, ticks.this_run())
-                });
+                let view_tick_check = |last_specialized_tick| {
+                    view_tick.is_none_or(|tick| {
+                        tick.is_newer_than(last_specialized_tick, ticks.this_run())
+                    })
+                };
+                let entity_tick_check = |last_specialized_tick| {
+                    entity_tick.is_none_or(|tick| {
+                        tick.is_newer_than(last_specialized_tick, ticks.this_run())
+                    })
+                };
+                let needs_specialization = last_specialized_tick
+                    .is_none_or(|tick| view_tick_check(tick) || entity_tick_check(tick));
                 if !needs_specialization {
                     continue;
                 }

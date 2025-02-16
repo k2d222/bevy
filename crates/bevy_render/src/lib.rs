@@ -101,6 +101,8 @@ use crate::{
 use alloc::sync::Arc;
 use bevy_app::{App, AppLabel, Plugin, SubApp};
 use bevy_asset::{load_internal_asset, weak_handle, AssetApp, AssetServer, Handle};
+use bevy_diagnostic::FrameCount;
+use bevy_ecs::system::SystemId;
 use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
 use bitflags::bitflags;
 use core::ops::{Deref, DerefMut};
@@ -123,6 +125,8 @@ pub struct RenderPlugin {
     pub synchronous_pipeline_compilation: bool,
     /// Debugging flags that can optionally be set when constructing the renderer.
     pub debug_flags: RenderDebugFlags,
+    /// Number of frames between clearing the render caches.
+    pub clear_caches_every_n_frames: u32,
 }
 
 bitflags! {
@@ -447,6 +451,13 @@ impl Plugin for RenderPlugin {
 
             let render_app = app.sub_app_mut(RenderApp);
 
+            if self.clear_caches_every_n_frames > 0 {
+                render_app.add_systems(
+                    Render,
+                    clear_caches(self.clear_caches_every_n_frames).in_set(RenderSet::Cleanup),
+                );
+            }
+
             render_app
                 .insert_resource(instance)
                 .insert_resource(PipelineCache::new(
@@ -458,6 +469,7 @@ impl Plugin for RenderPlugin {
                 .insert_resource(queue)
                 .insert_resource(render_adapter)
                 .insert_resource(adapter_info)
+                .init_resource::<RenderCaches>()
                 .add_systems(
                     Render,
                     (|mut bpf: ResMut<RenderAssetBytesPerFrame>| {
@@ -572,4 +584,32 @@ pub fn get_adreno_model(adapter: &RenderAdapter) -> Option<u32> {
             .map_while(|c| c.to_digit(10))
             .fold(0, |acc, digit| acc * 10 + digit),
     )
+}
+
+fn clear_caches(frames: u32) -> impl Fn(Commands, Res<FrameCount>, Res<RenderCaches>) {
+    move |commands: Commands, frame_count: Res<FrameCount>, render_caches: Res<RenderCaches>| {
+        if frame_count.0 % frames == 0 {
+            render_caches.clear_caches(commands);
+        }
+    }
+}
+
+/// Manages the render caches. Cache clearing can be configured by settings the
+/// `clear_caches_every_n_frames` field of [`RenderPlugin`], or by manually calling `clear_caches`
+/// on the [`RenderCaches`] resource.
+#[derive(Resource, Default)]
+pub struct RenderCaches {
+    clear_caches_callbacks: Vec<SystemId>,
+}
+
+impl RenderCaches {
+    pub fn add_clear_cache_callback(&mut self, callback: SystemId) {
+        self.clear_caches_callbacks.push(callback);
+    }
+
+    pub fn clear_caches(&self, mut commands: Commands) {
+        for callback in &self.clear_caches_callbacks {
+            commands.run_system(*callback);
+        }
+    }
 }

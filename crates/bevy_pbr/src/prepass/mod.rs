@@ -868,6 +868,16 @@ pub fn check_prepass_views_need_specialization(
     }
 }
 
+pub fn clear_prepass_material_caches<M: Material>(
+    mut view_key_prepass_cache: ResMut<ViewKeyPrepassCache>,
+    mut specialized_material_pipeline_cache: ResMut<SpecializedPrepassMaterialPipelineCache<M>>,
+    mut view_prepass_specialization_ticks: ResMut<ViewPrepassSpecializationTicks>,
+) {
+    view_key_prepass_cache.clear();
+    specialized_material_pipeline_cache.clear();
+    view_prepass_specialization_ticks.clear();
+}
+
 pub fn specialize_prepass_material_meshes<M>(
     render_meshes: Res<RenderAssets<RenderMesh>>,
     render_materials: Res<RenderAssets<PreparedMaterial<M>>>,
@@ -939,15 +949,21 @@ pub fn specialize_prepass_material_meshes<M>(
         };
 
         for (_, visible_entity) in visible_entities.iter::<Mesh3d>() {
-            let view_tick = view_specialization_ticks.get(view_entity).unwrap();
-            let entity_tick = entity_specialization_ticks.get(visible_entity).unwrap();
+            let view_tick = view_specialization_ticks.get(view_entity);
+            let entity_tick = entity_specialization_ticks.get(visible_entity);
             let last_specialized_tick = specialized_material_pipeline_cache
                 .get(&(*view_entity, *visible_entity))
                 .map(|(tick, _)| *tick);
-            let needs_specialization = last_specialized_tick.is_none_or(|tick| {
-                view_tick.is_newer_than(tick, ticks.this_run())
-                    || entity_tick.is_newer_than(tick, ticks.this_run())
-            });
+            let view_tick_check = |last_specialized_tick| {
+                view_tick
+                    .is_none_or(|tick| tick.is_newer_than(last_specialized_tick, ticks.this_run()))
+            };
+            let entity_tick_check = |last_specialized_tick| {
+                entity_tick
+                    .is_none_or(|tick| tick.is_newer_than(last_specialized_tick, ticks.this_run()))
+            };
+            let needs_specialization = last_specialized_tick
+                .is_none_or(|tick| view_tick_check(tick) || entity_tick_check(tick));
             if !needs_specialization {
                 continue;
             }
