@@ -166,6 +166,14 @@ impl ShaderDefVal {
             ShaderDefVal::UInt(_, def) => def.to_string(),
         }
     }
+
+    pub fn name(&self) -> &str {
+        match self {
+            ShaderDefVal::Bool(name, _) => name,
+            ShaderDefVal::Int(name, _) => name,
+            ShaderDefVal::UInt(name, _) => name,
+        }
+    }
 }
 
 impl ShaderCache {
@@ -287,41 +295,79 @@ impl ShaderCache {
                     Source::SpirV(data) => make_spirv(data),
                     #[cfg(feature = "shader_format_wesl")]
                     Source::Wesl(_) => {
-                        if let ShaderImport::AssetPath(path) = shader.import_path() {
-                            let shader_resolver =
-                                ShaderResolver::new(&self.asset_paths, &self.shaders);
-                            let module_path = wesl::syntax::ModulePath::from_path(path);
-                            let mut compiler_options = wesl::CompileOptions {
-                                imports: true,
-                                condcomp: true,
-                                lower: true,
-                                ..default()
-                            };
-
-                            for shader_def in shader_defs {
-                                match shader_def {
-                                    ShaderDefVal::Bool(key, value) => {
-                                        compiler_options.features.insert(key.clone(), value);
-                                    }
-                                    _ => debug!(
-                                        "ShaderDefVal::Int and ShaderDefVal::UInt are not supported in wesl",
+                        let wgsl = (|| -> Result<String, wesl::Error> {
+                            use wesl::*;
+                            let path = std::path::PathBuf::from(&shader.path);
+                            let mut resolver = PkgResolver::new();
+                            resolver.add_package(&bevy_wgsl::bevy::Mod);
+                            let mut base = std::path::PathBuf::from("assets");
+                            base.extend(path.parent().unwrap());
+                            let name = path.file_name().unwrap();
+                            let mut compiler = Wesl::new(base);
+                            compiler
+                                .add_package(&bevy_wgsl::bevy::Mod)
+                                .set_options(CompileOptions {
+                                    imports: true,
+                                    condcomp: true,
+                                    generics: false,
+                                    strip: std::env::var("WESL_STRIP").is_ok(),
+                                    lower: std::env::var("WESL_LOWER").is_ok(),
+                                    validate: std::env::var("WESL_VALIDATE`").is_ok(),
+                                    lazy: std::env::var("WESL_LAZY").is_ok(),
+                                    ..Default::default()
+                                })
+                                .set_missing_feature_behavior(Feature::Disable)
+                                .set_features(
+                                    shader_defs.iter().chain(&shader.shader_defs).filter_map(
+                                        |def| match def {
+                                            ShaderDefVal::Bool(k, v) => Some((k, *v)),
+                                            _ => None,
+                                        },
                                     ),
-                                }
+                                )
+                                .add_constants(
+                                    shader_defs.iter().chain(&shader.shader_defs).filter_map(
+                                        |def| match def {
+                                            ShaderDefVal::Bool(_, _) => None,
+                                            ShaderDefVal::Int(k, v) => Some((k, *v as f64)),
+                                            ShaderDefVal::UInt(k, v) => Some((k, *v as f64)),
+                                        },
+                                    ),
+                                )
+                                .add_constants([
+                                    ("MAX_CASCADES_PER_LIGHT", 4.0),
+                                    ("MAX_DIRECTIONAL_LIGHTS", 10.0),
+                                ]);
+                            let avail_storage_buf_bindings = shader_defs
+                                .iter()
+                                .find_map(|def| match def {
+                                    ShaderDefVal::UInt(n, v)
+                                        if n == "AVAILABLE_STORAGE_BUFFER_BINDINGS" =>
+                                    {
+                                        Some(*v)
+                                    }
+                                    _ => None,
+                                })
+                                .unwrap_or(0);
+                            if avail_storage_buf_bindings >= 6 {
+                                compiler
+                                    .set_feature("AVAILABLE_STORAGE_BUFFER_BINDINGS__GE_6", true);
                             }
+                            if avail_storage_buf_bindings >= 3 {
+                                compiler
+                                    .set_feature("AVAILABLE_STORAGE_BUFFER_BINDINGS__GE_3", true);
+                            }
+                            let comp = compiler.compile(name)?;
+                            Ok(comp.syntax.to_string())
+                        })()
+                        .inspect_err(|e| {
+                            eprintln!("wesl: {e}");
+                        })
+                        .unwrap();
 
-                            let compiled = wesl::compile(
-                                &module_path,
-                                &shader_resolver,
-                                &wesl::EscapeMangler,
-                                &compiler_options,
-                            )
-                            .unwrap();
+                        println!("--- WESL ---\n{wgsl}\n --- ==== ---");
 
-                            let naga = naga::front::wgsl::parse_str(&compiled.to_string()).unwrap();
-                            ShaderSource::Naga(Cow::Owned(naga))
-                        } else {
-                            panic!("Wesl shaders must be imported from a file");
-                        }
+                        ShaderSource::Wgsl(Cow::Owned(wgsl))
                     }
                     #[cfg(not(feature = "shader_format_spirv"))]
                     Source::SpirV(_) => {
@@ -340,8 +386,9 @@ impl ShaderCache {
                         }
 
                         let shader_defs = shader_defs
-                            .into_iter()
-                            .chain(shader.shader_defs.iter().cloned())
+                            .iter()
+                            .chain(&shader.shader_defs)
+                            .cloned()
                             .map(|def| match def {
                                 ShaderDefVal::Bool(k, v) => {
                                     (k, naga_oil::compose::ShaderDefValue::Bool(v))
@@ -362,28 +409,19 @@ impl ShaderCache {
                             },
                         )?;
 
-                        #[cfg(not(feature = "decoupled_naga"))]
-                        {
-                            ShaderSource::Naga(Cow::Owned(naga))
-                        }
+                        let mut validator = naga::valid::Validator::new(
+                            naga::valid::ValidationFlags::all(),
+                            self.composer.capabilities,
+                        );
+                        let module_info = validator.validate(&naga).unwrap();
+                        let wgsl = naga::back::wgsl::write_string(
+                            &naga,
+                            &module_info,
+                            naga::back::wgsl::WriterFlags::empty(),
+                        )
+                        .unwrap();
 
-                        #[cfg(feature = "decoupled_naga")]
-                        {
-                            let mut validator = naga::valid::Validator::new(
-                                naga::valid::ValidationFlags::all(),
-                                self.composer.capabilities,
-                            );
-                            let module_info = validator.validate(&naga).unwrap();
-                            let wgsl = Cow::Owned(
-                                naga::back::wgsl::write_string(
-                                    &naga,
-                                    &module_info,
-                                    naga::back::wgsl::WriterFlags::empty(),
-                                )
-                                .unwrap(),
-                            );
-                            ShaderSource::Wgsl(wgsl)
-                        }
+                        ShaderSource::Wgsl(Cow::Owned(wgsl))
                     }
                 };
 

@@ -12,7 +12,7 @@ use bevy::{
 };
 
 /// This example uses a shader source file from the assets subdirectory
-const SHADER_ASSET_PATH: &str = "shaders/fallback_image_test.wgsl";
+const SHADER_ASSET_PATH: &str = "shaders/fallback_image_test.wesl";
 
 fn main() {
     App::new()

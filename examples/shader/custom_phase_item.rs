@@ -382,7 +382,7 @@ impl FromWorld for CustomPhasePipeline {
         let asset_server = world.resource::<AssetServer>();
 
         CustomPhasePipeline {
-            shader: asset_server.load("shaders/custom_phase_item.wgsl"),
+            shader: asset_server.load("shaders/custom_phase_item.wesl"),
         }
     }
 }

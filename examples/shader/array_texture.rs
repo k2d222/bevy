@@ -8,7 +8,7 @@ use bevy::{
 };
 
 /// This example uses a shader source file from the assets subdirectory
-const SHADER_ASSET_PATH: &str = "shaders/array_texture.wgsl";
+const SHADER_ASSET_PATH: &str = "shaders/array_texture.wesl";
 
 fn main() {
     App::new()

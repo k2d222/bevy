@@ -159,35 +159,27 @@ impl Shader {
     pub fn from_wesl(source: impl Into<Cow<'static, str>>, path: impl Into<String>) -> Shader {
         let source = source.into();
         let path = path.into();
-        let (import_path, imports) = Shader::preprocess(&source, &path);
 
-        match import_path {
-            ShaderImport::AssetPath(asset_path) => {
-                // Create the shader import path - always starting with "/"
-                let shader_path = std::path::Path::new("/").join(&asset_path);
+        // Create the shader import path - always starting with "/"
+        let shader_path = std::path::Path::new("/").join(&path);
 
-                // Convert to a string with forward slashes and without extension
-                let import_path_str = shader_path
-                    .with_extension("")
-                    .to_string_lossy()
-                    .replace('\\', "/");
+        // Convert to a string with forward slashes and without extension
+        let import_path_str = shader_path
+            .with_extension("")
+            .to_string_lossy()
+            .replace('\\', "/");
 
-                let import_path = ShaderImport::AssetPath(import_path_str.to_string());
+        let import_path = ShaderImport::AssetPath(import_path_str.to_string());
 
-                Shader {
-                    path,
-                    imports,
-                    import_path,
-                    source: Source::Wesl(source),
-                    additional_imports: Default::default(),
-                    shader_defs: Default::default(),
-                    file_dependencies: Default::default(),
-                    validate_shader: ValidateShader::Disabled,
-                }
-            }
-            ShaderImport::Custom(_) => {
-                panic!("Wesl shaders must be imported from an asset path");
-            }
+        Shader {
+            path,
+            imports: Vec::new(),
+            import_path,
+            source: Source::Wesl(source),
+            additional_imports: Default::default(),
+            shader_defs: Default::default(),
+            file_dependencies: Default::default(),
+            validate_shader: ValidateShader::Disabled,
         }
     }
 

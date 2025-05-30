@@ -59,7 +59,7 @@ use bevy::{
 };
 use nonmax::NonMaxU32;
 
-const SHADER_ASSET_PATH: &str = "shaders/custom_stencil.wgsl";
+const SHADER_ASSET_PATH: &str = "shaders/custom_stencil.wesl";
 
 fn main() {
     App::new()

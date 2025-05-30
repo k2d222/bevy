@@ -11,7 +11,7 @@ use bevy::{
     },
 };
 
-const SHADER_ASSET_PATH: &str = "shaders/automatic_instancing.wgsl";
+const SHADER_ASSET_PATH: &str = "shaders/automatic_instancing.wesl";
 
 fn main() {
     App::new()
