@@ -49,6 +49,8 @@ use crate::{
     ViewLightsUniformOffset,
 };
 
+const SSR_SHADER_HANDLE: Handle<Shader> = weak_handle!("0b559df2-0d61-4f53-bf62-aea16cf32787");
+
 /// Enables screen-space reflections for a camera.
 ///
 /// Screen-space reflections are currently only supported with deferred rendering.
@@ -177,8 +179,7 @@ pub struct ScreenSpaceReflectionsPipelineKey {
 
 impl Plugin for ScreenSpaceReflectionsPlugin {
     fn build(&self, app: &mut App) {
-        load_shader_library!(app, "ssr.wgsl");
-        load_shader_library!(app, "raymarch.wgsl");
+        load_internal_asset!(app, SSR_SHADER_HANDLE, "ssr.wesl", Shader::from_wgsl);
 
         app.register_type::<ScreenSpaceReflections>()
             .add_plugins(ExtractComponentPlugin::<ScreenSpaceReflections>::default());

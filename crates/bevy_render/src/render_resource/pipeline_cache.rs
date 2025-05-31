@@ -304,6 +304,13 @@ impl ShaderCache {
                             base.extend(path.parent().unwrap());
                             let name = path.file_name().unwrap();
                             let mut compiler = Wesl::new(base);
+                            println!(
+                                "WESL_STRIP: {}\nWESL_LOWER: {}\nWESL_VALIDATE: {}\nWESL_LAZY: {}",
+                                std::env::var("WESL_STRIP").is_ok(),
+                                std::env::var("WESL_LOWER").is_ok(),
+                                std::env::var("WESL_VALIDATE").is_ok(),
+                                std::env::var("WESL_LAZY").is_ok()
+                            );
                             compiler
                                 .add_package(&bevy_wgsl::bevy::Mod)
                                 .set_options(CompileOptions {
@@ -366,6 +373,26 @@ impl ShaderCache {
                         .unwrap();
 
                         println!("--- WESL ---\n{wgsl}\n --- ==== ---");
+
+                        // let mut validator = naga::valid::Validator::new(
+                        //     naga::valid::ValidationFlags::all(),
+                        //     self.composer.capabilities,
+                        // );
+
+                        // let naga = naga::front::wgsl::parse_str(&wgsl).unwrap();
+                        // let module_info = match validator.validate(&naga) {
+                        //     Ok(m) => m,
+                        //     Err(e) => {
+                        //         eprintln!("{}", e.to_string());
+                        //         panic!()
+                        //     }
+                        // };
+                        // let wgsl = naga::back::wgsl::write_string(
+                        //     &naga,
+                        //     &module_info,
+                        //     naga::back::wgsl::WriterFlags::empty(),
+                        // )
+                        // .unwrap();
 
                         ShaderSource::Wgsl(Cow::Owned(wgsl))
                     }

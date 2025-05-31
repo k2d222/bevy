@@ -30,16 +30,9 @@
 #     shader_material_screenspace_texture
 
 set examples \
-    ssr \
-    clustered_decals \
-    array_texture \
-    irradiance_volumes \
     fallback_image \
-    shader_prepass \
-    extended_material \
     shader_material_wesl \
-    shader_material_bindless \
-    extended_material_bindless
+    shader_material_bindless
 
 # ssr: OK
 # lines: OK
@@ -52,8 +45,8 @@ set examples \
 # storage_buffer: OK
 # irradiance_volumes: OK
 # animate_shader: OK
-# fallback_image: looks broken, likely caused by strip (frag empty)
-# shader_prepass: wesl: error: module `bevy::pbr::mesh_view_bindings` has no declaration `depth_prepass_texture`
+# fallback_image: looks broken, fragment shader is empty
+# shader_prepass: OK
 # shader_material: OK
 # extended_material: OK
 # custom_phase_item: OK

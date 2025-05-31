@@ -98,6 +98,7 @@ impl Shader {
         let source = source.into();
         let path = path.into();
         let (import_path, imports) = Shader::preprocess(&source, &path);
+        println!("path: {path}, import_path: {}", import_path.module_name());
         Shader {
             path,
             imports,
@@ -170,6 +171,36 @@ impl Shader {
             .replace('\\', "/");
 
         let import_path = ShaderImport::AssetPath(import_path_str.to_string());
+
+        Shader {
+            path,
+            imports: Vec::new(),
+            import_path,
+            source: Source::Wesl(source),
+            additional_imports: Default::default(),
+            shader_defs: Default::default(),
+            file_dependencies: Default::default(),
+            validate_shader: ValidateShader::Disabled,
+        }
+    }
+
+    pub fn from_wesl_internal(
+        source: impl Into<Cow<'static, str>>,
+        path: impl Into<String>,
+    ) -> Shader {
+        let source = source.into();
+        let path = path.into();
+
+        // Create the shader import path - always starting with "/"
+        let shader_path = std::path::Path::new("/").join(&path);
+
+        // Convert to a string with forward slashes and without extension
+        let import_path_str = shader_path
+            .with_extension("")
+            .to_string_lossy()
+            .replace('\\', "/");
+
+        let import_path = ShaderImport::Custom(import_path_str.to_string());
 
         Shader {
             path,

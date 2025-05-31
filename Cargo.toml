@@ -4405,4 +4405,8 @@ wasm = true
 [patch.crates-io]
 wesl = { path = "../wesl-rs/crates/wesl" }
 bevy-wgsl = { path = "../bevy-wgsl" }
+# wgpu = { path = "../wgpu/wgpu" }
+# wgpu-hal = { path = "../wgpu/wgpu-hal" }
+# naga_oil = { path = "../naga_oil" }
+# naga = { path = "../wgpu/naga" }
 
