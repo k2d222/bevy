@@ -1,38 +1,38 @@
-# set examples \
-#     ssr \
-#     lines \
-#     ui_material \
-#     tonemapping \
-#     shader_defs \
-#     clustered_decals \
-#     gpu_readback \
-#     array_texture \
-#     storage_buffer \
-#     irradiance_volumes \
-#     animate_shader \
-#     fallback_image \
-#     shader_prepass \
-#     shader_material \
-#     extended_material \
-#     custom_phase_item \
-#     shader_material_2d \
-#     custom_render_phase \
-#     automatic_instancing \
-#     shader_material_wesl \
-#     texture_binding_array \
-#     custom_post_processing \
-#     custom_vertex_attribute \
-#     custom_gltf_vertex_attribute \
-#     custom_shader_instancing \
-#     shader_material_bindless \
-#     specialized_mesh_pipeline \
-#     extended_material_bindless \
-#     shader_material_screenspace_texture
-
 set examples \
+    ssr \
+    lines \
+    ui_material \
+    tonemapping \
+    shader_defs \
+    clustered_decals \
+    gpu_readback \
+    array_texture \
+    storage_buffer \
+    irradiance_volumes \
+    animate_shader \
     fallback_image \
+    shader_prepass \
+    shader_material \
+    extended_material \
+    custom_phase_item \
+    shader_material_2d \
+    custom_render_phase \
+    automatic_instancing \
     shader_material_wesl \
-    shader_material_bindless
+    texture_binding_array \
+    custom_post_processing \
+    custom_vertex_attribute \
+    custom_gltf_vertex_attribute \
+    custom_shader_instancing \
+    shader_material_bindless \
+    specialized_mesh_pipeline \
+    extended_material_bindless \
+    shader_material_screenspace_texture
+
+# set examples \
+#     fallback_image \
+#     shader_material_wesl \
+#     shader_material_bindless
 
 # ssr: OK
 # lines: OK
@@ -71,6 +71,37 @@ set examples \
 # specialized_mesh_pipeline: OK
 # extended_material_bindless: path not found
 # shader_material_screenspace_texture: OK
+
+# EXAMPLE: TIME (with eval), TIME (no eval)
+# ssr: 466, 95
+# lines: 10, 2
+# ui_material: 13, 4
+# tonemapping: N/A, N/A
+# shader_defs: 11 + 4, 2 + 2
+# clustered_decals: 679, 114
+# gpu_readback: N/A, N/A
+# array_texture: 559, 95
+# storage_buffer: 118, 29
+# irradiance_volumes: 126, 34
+# animate_shader: 35, 13
+# fallback_image: 19, 3
+# shader_prepass: 11 + 32 + 4, 13 + 3 + 12
+# shader_material: 12, 3
+# extended_material: 638, 
+# custom_phase_item: 11, 
+# shader_material_2d: 10, 
+# custom_render_phase: 130, 
+# automatic_instancing: 121, 
+# shader_material_wesl: 11, 
+# texture_binding_array: 14, 
+# custom_post_processing: 13, 
+# custom_vertex_attribute: 108, 
+# custom_gltf_vertex_attribute: 50, 
+# custom_shader_instancing: 114, 
+# shader_material_bindless: 14, 
+# specialized_mesh_pipeline: 104, 
+# extended_material_bindless: 654, 
+# shader_material_screenspace_texture: 47, 
 
 for example in $examples
     echo running $example

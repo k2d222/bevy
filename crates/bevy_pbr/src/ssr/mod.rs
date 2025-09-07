@@ -1,7 +1,7 @@
 //! Screen space reflections implemented via raymarching.
 
 use bevy_app::{App, Plugin};
-use bevy_asset::{load_embedded_asset, Handle};
+use bevy_asset::{load_embedded_asset, load_internal_asset, weak_handle, Handle};
 use bevy_core_pipeline::{
     core_3d::{
         graph::{Core3d, Node3d},
@@ -23,6 +23,7 @@ use bevy_ecs::{
 };
 use bevy_image::BevyDefault as _;
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
+use bevy_render::render_graph::RenderGraph;
 use bevy_render::{
     extract_component::{ExtractComponent, ExtractComponentPlugin},
     render_graph::{NodeRunError, RenderGraphApp, RenderGraphContext, ViewNode, ViewNodeRunner},
@@ -38,7 +39,6 @@ use bevy_render::{
     view::{ExtractedView, Msaa, ViewTarget, ViewUniformOffset},
     Render, RenderApp, RenderSystems,
 };
-use bevy_render::{load_shader_library, render_graph::RenderGraph};
 use bevy_utils::{once, prelude::default};
 use tracing::info;
 
@@ -179,7 +179,7 @@ pub struct ScreenSpaceReflectionsPipelineKey {
 
 impl Plugin for ScreenSpaceReflectionsPlugin {
     fn build(&self, app: &mut App) {
-        load_internal_asset!(app, SSR_SHADER_HANDLE, "ssr.wesl", Shader::from_wgsl);
+        load_internal_asset!(app, SSR_SHADER_HANDLE, "ssr.wesl", Shader::from_wesl);
 
         app.register_type::<ScreenSpaceReflections>()
             .add_plugins(ExtractComponentPlugin::<ScreenSpaceReflections>::default());
@@ -400,7 +400,7 @@ impl FromWorld for ScreenSpaceReflectionsPipeline {
             binding_arrays_are_usable: binding_arrays_are_usable(render_device, render_adapter),
             // Even though ssr was loaded using load_shader_library, we can still access it like a
             // normal embedded asset (so we can use it as both a library or a kernel).
-            shader: load_embedded_asset!(world, "ssr.wgsl"),
+            shader: load_embedded_asset!(world, "ssr.wesl"),
         }
     }
 }

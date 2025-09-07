@@ -364,7 +364,12 @@ impl ShaderCache {
                                 compiler
                                     .set_feature("AVAILABLE_STORAGE_BUFFER_BINDINGS__GE_3", true);
                             }
+
+                            let start = std::time::Instant::now();
                             let comp = compiler.compile(name)?;
+                            let end = std::time::Instant::now();
+                            println!("WESL compilation took {} ms", (end - start).as_millis());
+
                             Ok(comp.syntax.to_string())
                         })()
                         .inspect_err(|e| {
@@ -372,7 +377,7 @@ impl ShaderCache {
                         })
                         .unwrap();
 
-                        println!("--- WESL ---\n{wgsl}\n --- ==== ---");
+                        // println!("--- WESL ---\n{wgsl}\n --- ==== ---");
 
                         // let mut validator = naga::valid::Validator::new(
                         //     naga::valid::ValidationFlags::all(),

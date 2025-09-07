@@ -98,7 +98,7 @@ impl Shader {
         let source = source.into();
         let path = path.into();
         let (import_path, imports) = Shader::preprocess(&source, &path);
-        println!("path: {path}, import_path: {}", import_path.module_name());
+        // println!("path: {path}, import_path: {}", import_path.module_name());
         Shader {
             path,
             imports,
