@@ -299,13 +299,13 @@ impl ShaderCache {
                             use wesl::*;
                             let path = std::path::PathBuf::from(&shader.path);
                             let mut resolver = PkgResolver::new();
-                            resolver.add_package(&bevy_wgsl::bevy::Mod);
+                            resolver.add_package(&bevy_wgsl::bevy::PACKAGE);
                             let mut base = std::path::PathBuf::from("assets");
                             base.extend(path.parent().unwrap());
                             let name = path.file_name().unwrap();
                             let mut compiler = Wesl::new(base);
                             compiler
-                                .add_package(&bevy_wgsl::bevy::Mod)
+                                .add_package(&bevy_wgsl::bevy::PACKAGE)
                                 .set_options(CompileOptions {
                                     imports: true,
                                     condcomp: true,
@@ -357,7 +357,9 @@ impl ShaderCache {
                                 compiler
                                     .set_feature("AVAILABLE_STORAGE_BUFFER_BINDINGS__GE_3", true);
                             }
-                            let comp = compiler.compile(name)?;
+                            let comp = compiler.compile(
+                                &format!("package::{}", name.display()).parse().unwrap(),
+                            )?;
                             Ok(comp.syntax.to_string())
                         })()
                         .inspect_err(|e| {

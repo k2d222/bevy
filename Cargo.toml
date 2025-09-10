@@ -4403,6 +4403,6 @@ category = "Usage"
 wasm = true
 
 [patch.crates-io]
-wesl = { path = "../wesl-rs/crates/wesl" }
+# wesl = { path = "../wesl-rs/crates/wesl" }
 bevy-wgsl = { path = "../bevy-wgsl" }
 
